@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: postgres-container
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      TZ: Asia/Shanghai # 设置时区
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      # 使用 pg_isready 工具来检查 PostgreSQL 服务是否就绪
+      test: [ "CMD-SHELL", "pg_isready -U root -d agricultural_vision" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    command: ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=256MB"]
+
+  redis:
+    image: redis/redis-stack:latest
+    container_name: redis-container
+    ports:
+      - "6379:6379"
+      - "8001:8001"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai  # 设置时区
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  rust-api:
+    build: .
+    container_name: rust-api-container
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/postgres
+      # 添加下面这行，使用服务名 'redis' 作为主机名
+      - REDIS_URL=redis://redis:6379
+      - SERVER_HOST=localhost
+      - SERVER_PORT=8000
+      - TZ=Asia/Shanghai  # 设置时区
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
